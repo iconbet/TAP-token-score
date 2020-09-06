@@ -630,6 +630,17 @@ class TapToken(IconScoreBase, TokenStandard):
         else:
             return True
 
+    @external
+    def switch_stake_update_db(self) -> None:
+        self._dividends_only()
+        self._staking_enabled_only()
+        self._switch_divs_to_staked_tap_enabled_only()
+
+        new_day = (self._stake_address_update_db.get() + 1) % 2
+        self._stake_address_update_db.set(new_day)
+        stake_changes = self._stake_changes[new_day]
+        self._index_stake_address_changes.set(len(stake_changes))
+
     @external(readonly=True)
     def get_locklist_addresses(self) -> list:
         """
