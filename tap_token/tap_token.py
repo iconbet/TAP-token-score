@@ -72,9 +72,11 @@ class TapToken(IconScoreBase, TokenStandard):
 
     _EVEN_DAY_STAKE_CHANGES = "even_day_stake_changes"
     _ODD_DAY_STAKE_CHANGES = "odd_day_stake_changes"
-    _STAKE_CHANGES = "stake_changes"
-    _INDEX_STAKE_CHANGES = "index_stake_changes"
+
+    _INDEX_STAKE_ADDRESS_CHANGES = "index_address_stake_changes"
+    _INDEX_UPDATE_STAKE = "index_update_stake"
     _STAKE_UPDATE_DB = "stake_update_db"
+    _STAKE_ADDRESS_UPDATE_DB = "stake_address_update_db"
 
     _STAKING_ENABLED = "staking_enabled"
     _SWITCH_DIVS_TO_STAKED_TAP_ENABLED = "switch_divs_to_staked_tap"
@@ -128,15 +130,14 @@ class TapToken(IconScoreBase, TokenStandard):
 
         self._even_day_stake_changes = ArrayDB(self._EVEN_DAY_STAKE_CHANGES, db, value_type=Address)
         self._odd_day_stake_changes = ArrayDB(self._ODD_DAY_STAKE_CHANGES, db, value_type=Address)
-        self._stake_changes = [
-            self._even_day_stake_changes,
-            self._odd_day_stake_changes,
-        ]
+        self._stake_changes = [self._even_day_stake_changes, self._odd_day_stake_changes]
+
+        self._index_update_stake = VarDB(self._INDEX_UPDATE_STAKE, db, value_type=int)
+        self._index_stake_address_changes = VarDB(self._INDEX_STAKE_ADDRESS_CHANGES, db, value_type=int)
 
         # To choose between even and odd DBs
         self._stake_update_db = VarDB(self._STAKE_UPDATE_DB, db, value_type=int)
-
-        self._index_stake_changes = VarDB(self._INDEX_STAKE_CHANGES, db, value_type=int)
+        self._stake_address_update_db = VarDB(self._STAKE_ADDRESS_UPDATE_DB, db, value_type=int)
 
         self._staking_enabled = VarDB(self._STAKING_ENABLED, db, value_type=bool)
         self._switch_divs_to_staked_tap_enabled = VarDB(self._SWITCH_DIVS_TO_STAKED_TAP_ENABLED, db, value_type=bool)
@@ -168,6 +169,10 @@ class TapToken(IconScoreBase, TokenStandard):
         self._staking_enabled.set(False)
         self._switch_divs_to_staked_tap_enabled.set(False)
         self._paused.set(False)
+        self._index_update_stake.set(0)
+        self._index_stake_address_changes.set(0)
+        self._stake_update_db.set(0)
+        self._stake_address_update_db.set(0)
 
     @external
     def untether(self) -> None:
@@ -325,8 +330,8 @@ class TapToken(IconScoreBase, TokenStandard):
         self._staked_balances[_from][Status.UNSTAKING_PERIOD] = self.now() + self._unstaking_period.get()
         self._total_staked_balance.set(self._total_staked_balance.get() + stake_increment)
 
-        if _from not in self._stake_changes[self._stake_update_db.get()]:
-            self._stake_changes[self._stake_update_db.get()].put(_from)
+        stake_address_changes = self._stake_changes[self._stake_address_update_db.get()]
+        stake_address_changes.put(_from)
 
     @external
     def transfer(self, _to: Address, _value: int, _data: bytes = None):
@@ -592,34 +597,26 @@ class TapToken(IconScoreBase, TokenStandard):
         stake_changes = self._stake_changes[self._stake_update_db.get()]
         length_list = len(stake_changes)
 
-        start = self._index_stake_changes.get()
+        start = self._index_update_stake.get()
         if start == length_list:
+            if self._stake_update_db.get() != self._stake_address_update_db.get():
+                self._stake_update_db.set(self._stake_address_update_db.get())
+                self._index_update_stake.set(self._index_stake_address_changes.get())
             return {}
         end = min(start + self._max_loop.get(), length_list)
         detailed_balances = {
             str(stake_changes[i]): self.staked_balanceOf(stake_changes[i])
             for i in range(start, end)
         }
-        self._index_stake_changes.set(end)
+        self._index_update_stake.set(end)
         return detailed_balances
-
-    @external
-    def switch_stake_update_db(self) -> None:
-        self._dividends_only()
-        self._staking_enabled_only()
-        self._switch_divs_to_staked_tap_enabled_only()
-
-        new_day = (self._stake_update_db.get() + 1) % 2
-        self._stake_update_db.set(new_day)
-        stake_changes = self._stake_changes[new_day]
-        self._index_stake_changes.set(len(stake_changes))
 
     @external
     def clear_yesterdays_stake_changes(self) -> bool:
         self._staking_enabled_only()
         self._switch_divs_to_staked_tap_enabled_only()
         self._dividends_only()
-        yesterday = (self._stake_update_db.get() + 1) % 2
+        yesterday = (self._stake_address_update_db.get() + 1) % 2
         yesterdays_changes = self._stake_changes[yesterday]
         length_list = len(yesterdays_changes)
         if length_list == 0:
@@ -689,8 +686,8 @@ class TapToken(IconScoreBase, TokenStandard):
             self._staked_balances[_address][Status.UNSTAKING] += staked_balance
             self._staked_balances[_address][Status.UNSTAKING_PERIOD] = (self.now() + self._unstaking_period.get())
             self._total_staked_balance.set(self._total_staked_balance.get() - staked_balance)
-            if _address not in self._stake_changes[self._stake_update_db.get()]:
-                self._stake_changes[self._stake_update_db.get()].put(_address)
+            stake_address_changes = self._stake_changes[self._stake_address_update_db.get()]
+            stake_address_changes.put(_address)
 
     @external(readonly=True)
     def get_whitelist_addresses(self) -> list:
