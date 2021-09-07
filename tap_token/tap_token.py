@@ -366,9 +366,6 @@ class TapToken(IconScoreBase, TokenStandard):
         self._staked_balances[_from][Status.AVAILABLE] = (self._staked_balances[_from][Status.AVAILABLE] - _value)
         self._staked_balances[_to][Status.AVAILABLE] = (self._staked_balances[_to][Status.AVAILABLE] + _value)
 
-        if _to not in self._addresses:
-            self._addresses.put(_to)
-
         if _to.is_contract:
             # If the recipient is SCORE,
             #   then calls `tokenFallback` to hand over control.
