@@ -166,13 +166,6 @@ class TapToken(IconScoreBase, TokenStandard):
 
     def on_update(self) -> None:
         super().on_update()
-        self._staking_enabled.set(False)
-        self._switch_divs_to_staked_tap_enabled.set(False)
-        self._paused.set(False)
-        self._index_update_stake.set(0)
-        self._index_stake_address_changes.set(0)
-        self._stake_update_db.set(0)
-        self._stake_address_update_db.set(0)
 
     @external
     def untether(self) -> None:
